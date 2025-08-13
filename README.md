@@ -77,10 +77,61 @@ streamlit run app.py
 
 ## システムアーキテクチャ
 
+### LangGraphフロー図
+
+```mermaid
+graph TD
+    Start([開始]) --> Retrieve[Retrieve Node<br/>文書検索]
+    Retrieve --> Generate[Generate Node<br/>回答生成 & 参照抽出]
+    Generate --> Condition{継続判定}
+    
+    Condition -->|continue<br/>新しい参照あり| Retrieve
+    Condition -->|end<br/>参照なし/最大深度到達| FinalGenerate[Final Generate Node<br/>最終回答生成]
+    
+    FinalGenerate --> End([終了])
+    
+    style Start fill:#e1f5e1
+    style End fill:#ffe1e1
+    style Retrieve fill:#e3f2fd
+    style Generate fill:#fff3e0
+    style FinalGenerate fill:#f3e5f5
+    style Condition fill:#fff8e1
+```
+
+### ノードの詳細
+
+| ノード | 責務 | 入力 | 出力 |
+|--------|------|------|------|
+| **Retrieve Node** | ベクトルストアから関連文書を検索 | クエリ（初回は質問、以降は参照） | 取得した文書をdocumentsに追加 |
+| **Generate Node** | 取得文書から回答生成と新規参照を抽出 | 質問と文書 | new_targets（新規参照）とprocessed_targets |
+| **Final Generate Node** | 全文書を統合して最終回答を生成 | 質問と全文書 | 最終的な回答 |
+
+### エッジと条件分岐
+
+```mermaid
+stateDiagram-v2
+    [*] --> Retrieve: Entry Point
+    Retrieve --> Generate: 常に遷移
+    Generate --> CheckCondition: 条件評価
+    
+    state CheckCondition <<choice>>
+    CheckCondition --> Retrieve: continue<br/>(新規参照あり & 深度未達)
+    CheckCondition --> FinalGenerate: end<br/>(参照なし or 最大深度)
+    
+    FinalGenerate --> [*]: END
+    
+    note right of CheckCondition
+        継続条件:
+        1. new_targetsが存在
+        2. recursion_depth < max_recursions
+        3. 未処理のターゲットが存在
+    end note
+```
+
 ### CRAGワークフロー
 1. **初期検索**: ユーザーの質問に基づく文書取得
 2. **参照抽出**: 取得文書からURL・文書参照を抽出
-3. **再帰検索**: 参照先の追加情報を検索
+3. **再帰検索**: 参照先の追加情報を検索（条件に応じて繰り返し）
 4. **統合生成**: 全情報を統合した最終回答の生成
 
 ### 状態管理
